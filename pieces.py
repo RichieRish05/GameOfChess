@@ -246,10 +246,18 @@ class King(Piece):
             return False
 
         #Ensure all squares between the king and rook are empty
+        #Ensure all squares between the king and rook are not under attack
+        king_og_pos = self.position
         squares = squares_to_check[direction] 
         for i in squares:
             if self.grid[x,i]:
                 return False
+            else:
+                self.move((x,i))
+                if self.am_i_in_check():
+                    self.reset_move(king_og_pos, None)
+                    return False
+                self.reset_move(king_og_pos, None)
 
         return True
 
@@ -278,9 +286,13 @@ class King(Piece):
                         old_pos = piece.position
                         piece_at_new_pos = self.grid[move]
                         self.grid = piece.move(move) #Moves the piece to all of its possible moves
+                        if isinstance(piece, Pawn):
+                           en_passant_captured_piece = piece.en_passant_captured_piece
                         if not self.am_i_in_check(): #Checks if there is one possible move that results in not check
-                            self.grid = original_grid #Resets grid
+                            if isinstance(piece, Pawn):
+                                piece.en_passant_captured_piece = en_passant_captured_piece
                             piece.reset_move(old_pos, piece_at_new_pos)
+                            self.grid = original_grid #Resets grid
                             return False
                         piece.reset_move(old_pos, piece_at_new_pos)
                         self.grid = original_grid #Resets grid
@@ -292,11 +304,11 @@ class King(Piece):
 
 
     def is_stalemate(self):
-        '''Checks if King is in stalemate'''
-        original_grid = self.grid #To reset grid back to original position
+        '''Checks if King is in stalemate'''    
+        original_grid = self.grid #Used to reset grid back to original position
         possible_moves = []
 
-        if not self.am_i_in_check(): #Checks if king is not in check
+        if not self.am_i_in_check(): #Checks if king is in check
             for piece in self.piece_list: 
                 if piece.color == self.color: #Checks through all pieces of same color as king
                     possible_moves = piece.highlight_move() #Gets all possible moves of a piece w/ same color as king
@@ -304,8 +316,11 @@ class King(Piece):
                         old_pos = piece.position
                         piece_at_new_pos = self.grid[move]
                         self.grid = piece.move(move) #Moves the piece to all of its possible moves
+                        if isinstance(piece, Pawn):
+                           en_passant_captured_piece = piece.en_passant_captured_piece
                         if not self.am_i_in_check(): #Checks if there is one possible move that results in not check
-                            self.grid = original_grid #Resets grid
+                            if isinstance(piece, Pawn):
+                                piece.en_passant_captured_piece = en_passant_captured_piece
                             piece.reset_move(old_pos, piece_at_new_pos)
                             return False
                         piece.reset_move(old_pos, piece_at_new_pos)
@@ -315,6 +330,10 @@ class King(Piece):
        
         self.grid = original_grid #Resets grid
         return False
+
+
+    
+    
         
 
     def move(self, new_position): 
@@ -474,11 +493,13 @@ class Pawn(Piece):
         elif self.color == 'black':
             self.sprite = pygame.image.load('Chess_pdt60.png')
             self.sprite = pygame.transform.scale(self.sprite, (100, 100))
+        self.just_jumped_two = None
+        self.piece_list = self.get_piece_list()
 
 
 
     def highlight_move(self):
-        '''Returns a list of all possible moves for a King at any position on the board'''
+        '''Returns a list of all possible moves for a pawn at any position on the board'''
         possible_moves = []
         x = self.position[0]
         y = self.position[1]
@@ -490,6 +511,9 @@ class Pawn(Piece):
         if self.color == 'white':
             direction = -1
             starting_row = 6
+        
+        self.en_passant_captured_piece = None
+
 
         #Check for a two-step move from the starting row if both squares are empty
         if x == starting_row and self.is_empty(x+direction*2,y) and self.is_empty(x+direction,y):
@@ -506,8 +530,78 @@ class Pawn(Piece):
         #Check for possible captures on the right diagonal
         if self.can_capture(x+direction, y+1, self.color):
             possible_moves.append((x+direction, y+1))
-    
-    
+
+        #Checks for right en passant
+        if self.can_en_passant(x, y+1):
+            possible_moves.append((x+direction,y+1))
+
+        
+        #Checks for left en passant
+        if self.can_en_passant(x, y-1):
+            possible_moves.append((x+direction,y-1))
         return possible_moves
+
+    def can_en_passant(self, x, y):
+        '''
+        Checks if the pawn can perform an en passant move
+        '''
+        if self.can_capture(x, y, self.color) and isinstance(self.grid[x,y], Pawn):
+            if self.grid[x,y].just_jumped_two:
+                return True
+        return False
+    
+    def move(self, new_position): 
+        '''Allows us to move the piece by updating its position'''
+
+        direction = {'white': -1, 'black': 1}
+        self.num_moves += 1 #counts the number of moves for each individual piece
+
+        piece_at_new_pos = self.grid[new_position]
+       
+        old_position = self.position
+        self.position = new_position #updates the position of the piece
+
+        self.grid[new_position] = self #moves the piece to the new position
+        self.grid[old_position] = None #removes the piece from the old position
+
+        if abs(new_position[0] - old_position[0]) > 1:
+            self.just_jumped_two = True
+        
+        
+
+        #Handles en passant logic
+        if old_position[1] != new_position[1] and piece_at_new_pos == None:
+            en_passant_capture = self.grid[old_position[0], new_position[1]]
+            if en_passant_capture.color != self.color:
+                self.en_passant_captured_piece = en_passant_capture
+                self.grid[en_passant_capture.position] = None
+
+        return self.grid 
+    
+
+    def reset_move(self, new_position, piece_at_new_pos):
+        '''Allows us to reset a move made by a piece by updating its position'''
+        self.num_moves -= 1 #adjusts the number of moves for each individual piece
+        
+        old_position = self.position
+        self.position = new_position #updates the position of the piece
+
+        self.grid[new_position] = self #moves the piece to the new position
+        self.grid[old_position] = piece_at_new_pos #adds the piece from the new position
+
+        #Handles en passant reset
+        if old_position[1] != new_position[1] and piece_at_new_pos == None:
+            self.en_passant_captured_piece = self.en_passant_captured_piece
+            self.grid[self.en_passant_captured_piece.position] = self.en_passant_captured_piece
+            self.en_passant_captured_piece = None
+            
+
+        return self.grid
+    
+
+
+
+
+            
 
         

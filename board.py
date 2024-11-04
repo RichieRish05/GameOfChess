@@ -177,7 +177,7 @@ class Board():
 
             for piece in self.piece_list:
                 piece.grid = self.grid #Updates each piece object's reference to the board
-
+            
 
             for piece in self.piece_list:
                 self.window.blit(piece.sprite, self.convert_coords_graphics(piece.position)) 
@@ -308,6 +308,7 @@ class Board():
         #If a piece has been selected and it is clicked, the piece's possible moves are highlighted
         if self.selected_piece and mouse_position == self.selected_piece.position:
             self.highlighted_squares = self.selected_piece.highlight_move() 
+
         else:
             #Checks if the user clicked a highlighted square
             for square in self.highlighted_squares:
@@ -315,16 +316,27 @@ class Board():
                    
                     piece_at_new_pos = self.grid[square] #the element of the grid at the position clicked
                     self.grid = self.piece_in_motion.move(square)
+                    #print(self.piece_in_motion.position) #TESTING
                     self.count_moves(self.piece_in_motion, 1) 
                     self.update_turn() 
+                    
+                    
+
 
                     #Checks if King is in check and the if the side whose king is in check is moving
+                
                     for piece in self.piece_list:
+                        if piece != self.piece_in_motion and isinstance(piece, pieces.Pawn):
+                            piece.just_jumped_two = False
+
+                
                         if isinstance(piece, pieces.King):
                             if piece.am_i_in_check() and self.piece_in_motion.color == piece.color: 
                                 self.grid = self.piece_in_motion.reset_move(self.old_pos, piece_at_new_pos) #resets move
                                 self.count_moves(self.piece_in_motion, -1) 
                                 self.update_turn() 
+
+
                     
                     #If the move is a castle, this handles castling mechanics
                     self.castling_mechanics()
